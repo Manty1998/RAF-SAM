@@ -80,88 +80,8 @@ parser.add_argument('--consistency_frequency', type=float, default=0.1, help='Co
 
 args = parser.parse_args()
 
-# if __name__ == "__main__":
-#
-#     if not args.deterministic:
-#         cudnn.benchmark = True
-#         cudnn.deterministic = False
-#     else:
-#         cudnn.benchmark = False
-#         cudnn.deterministic = True
-#
-#     random.seed(args.seed)
-#     np.random.seed(args.seed)
-#     torch.manual_seed(args.seed)
-#     torch.cuda.manual_seed(args.seed)
-#     dataset_name = args.dataset
-#     dataset_config = {
-#         'ACDC': {
-#             'root_path': args.root_path,
-#             'num_classes': args.num_classes,
-#         }
-#     }
-#     args.is_pretrain = True
-#     args.exp = dataset_name + '_' + str(args.img_size)
-#     snapshot_path = os.path.join(args.output, "{}".format(args.exp))
-#     snapshot_path = snapshot_path + '_pretrain' if args.is_pretrain else snapshot_path
-#     snapshot_path += '_' + args.vit_name
-#     snapshot_path = snapshot_path + '_' + str(args.max_iterations)[
-#                                           0:2] + 'k' if args.max_iterations != 30000 else snapshot_path
-#     snapshot_path = snapshot_path + '_epo' + str(args.max_epochs) if args.max_epochs != 30 else snapshot_path
-#     snapshot_path = snapshot_path + '_bs' + str(args.batch_size)
-#     snapshot_path = snapshot_path + '_lr' + str(args.base_lr) if args.base_lr != 0.005 else snapshot_path
-#     snapshot_path = snapshot_path + '_s' + str(args.seed) if args.seed != 1234 else snapshot_path
-#     snapshot_path = snapshot_path + '_dice_coeff' + str(args.dice_param) if args.dice_param != 0.8 else snapshot_path
-#     snapshot_path = snapshot_path + '_'+str(args.labeled_num)+'_labeled'
-#     snapshot_path += '_' + args.method
-#     snapshot_path += '_T' + str(args.T)
-#
-#     if not os.path.exists(snapshot_path):
-#         os.makedirs(snapshot_path)
-#
-#     # register model
-#     sam, img_embedding_size = sam_model_registry[args.vit_name](image_size=args.img_size,
-#                                                                 num_classes=args.num_classes,
-#                                                                 checkpoint=args.ckpt, pixel_mean=[0, 0, 0],
-#                                                                 pixel_std=[1, 1, 1])
-#
-#
-#     pkg = import_module(args.module)
-#     net = pkg.LoRA_Sam(sam, args.rank).cuda()
-#
-#     # 打印模型的总参数量
-#     num_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
-#     print(f"模型的总参数量为: {num_params}")
-#
-#     if args.lora_ckpt is not None:
-#         net.load_lora_parameters(args.lora_ckpt)
-#
-#
-#     if args.AdamW:
-#         # optimizer = torch.optim.AdamW(net.parameters(), lr=args.base_lr)    #原来的
-#         # 在训练脚本中定义优化器时，加入 weight_decay 参数
-#         optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-5)  # weight_decay 设置为 L2 正则化系数
-#
-#     else:
-#         optimizer = torch.optim.SGD(net.parameters(), lr=args.base_lr, momentum=0.9, weight_decay=0.0001)
-#
-#     multimask_output = True
-#
-#     low_res = img_embedding_size * 4
-#
-#     config_file = os.path.join(snapshot_path, 'config.txt')
-#     config_items = []
-#     for key, value in args.__dict__.items():
-#         config_items.append(f'{key}: {value}\n')
-#
-#     with open(config_file, 'w') as f:
-#         f.writelines(config_items)
-#
-#     trainer = {'ACDC': trainer_acdc_dualmask_prompt_ssl_fixcoe_random_new_mean_up}
-#     trainer[dataset_name](args, net, snapshot_path, multimask_output, low_res)
-from fvcore.nn import FlopCountAnalysis
-
 if __name__ == "__main__":
+
     if not args.deterministic:
         cudnn.benchmark = True
         cudnn.deterministic = False
@@ -213,24 +133,15 @@ if __name__ == "__main__":
     num_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
     print(f"模型的总参数量为: {num_params}")
 
-    import torchprofile
-
-    # 定义模型输入
-    dummy_input = torch.randn(1, 3, 512, 512).cuda()  # 假设输入为 (batch_size, channels, height, width)
-
-    # 使用 torchprofile.profile 计算 FLOPS
-    prof = torchprofile.profile_model(net, (dummy_input,), detailed=True)
-
-    # 输出 FLOPS 结果
-    flops = prof["flops"] / 1e9  # 转换为 GFLOPS
-    print(f"模型的 FLOPS: {flops:.2f} GFLOPS")
-
     if args.lora_ckpt is not None:
         net.load_lora_parameters(args.lora_ckpt)
 
 
     if args.AdamW:
-        optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-5)
+        # optimizer = torch.optim.AdamW(net.parameters(), lr=args.base_lr)    #原来的
+        # 在训练脚本中定义优化器时，加入 weight_decay 参数
+        optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-5)  # weight_decay 设置为 L2 正则化系数
+
     else:
         optimizer = torch.optim.SGD(net.parameters(), lr=args.base_lr, momentum=0.9, weight_decay=0.0001)
 
@@ -246,15 +157,7 @@ if __name__ == "__main__":
     with open(config_file, 'w') as f:
         f.writelines(config_items)
 
-    # Memory (G) 测量在训练循环中加入
     trainer = {'ACDC': trainer_acdc_dualmask_prompt_ssl_fixcoe_random_new_mean_up}
+    trainer[dataset_name](args, net, snapshot_path, multimask_output, low_res)
 
-    def custom_trainer(args, net, snapshot_path, multimask_output, low_res):
-        trainer[dataset_name](args, net, snapshot_path, multimask_output, low_res)
-        # 在训练结束时打印显存使用情况
-        memory_allocated = torch.cuda.memory_allocated() / 1024**3  # 转换为 GB
-        memory_reserved = torch.cuda.memory_reserved() / 1024**3   # 转换为 GB
-        print(f"训练结束 - 显存分配: {memory_allocated:.2f} GB, 显存保留: {memory_reserved:.2f} GB")
-
-    custom_trainer(args, net, snapshot_path, multimask_output, low_res)
 
